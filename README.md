@@ -40,7 +40,7 @@ session → project → constraints → tasks → locks → health
     → decisions → artifacts → task_classification → risk_policy → risks
 ```
 
-每字段标注：必填/可选/自动生成 + 读写权限（Orchestrator / Executor / Validator / Architect / Human）。
+每字段标注：必填/可选/自动生成 + 读写权限（Orchestrator / Executor / Validator / Architect / Human）。每字段标注：必填/可选/自动生成+ 读写权限（Orchestrator / Executor / Validator / Architect / Human）。
 
 ---
 
@@ -58,4 +58,4 @@ session → project → constraints → tasks → locks → health
 
 ## 许可
 
-MIT
+MIT和
