@@ -1,0 +1,212 @@
+# ============================================================
+# Agent OS — AI 协作协议 v1 (FROZEN)
+# schema_version: 1.0.0
+# compatibility: forward_compatible
+#
+# 权限模型:
+#   R = 所有 Agent 可读
+#   O = Orchestrator 可写
+#   E = 执行 Agent 可写
+#   V = Validator 可写
+#   A = Architect 可写
+#   H = Human/Orchestrator 可写
+#
+# 字段标注: [必填] [可选] [自动]
+# ============================================================
+
+schema_version: "1.0.0"
+compatibility:
+  forward_compatible: true
+
+# ============================================================
+# 会话 — 权限: O
+# ============================================================
+session:                             # [必填]
+  id: ""                             # [自动] 会话唯一标识
+  created: ""                        # [自动] ISO 8601
+  updated: ""                        # [自动]
+  status: idle                       # [自动] idle | running | blocked | done
+
+# ============================================================
+# 项目基线 — 权限: O
+# ============================================================
+project:                             # [必填]
+  name: ""                           # [必填]
+  root: ""                           # [必填] 项目绝对路径
+  type: ""                           # [必填] astro | vite | next | unknown
+  repo: ""                           # [可选] git remote URL
+  branch: ""                         # [可选]
+
+# ============================================================
+# 全局约束 — 权限: H
+# ============================================================
+constraints:                         # [必填]
+  style: []                          # [可选] 代码风格规则
+  architecture: []                   # [可选] 架构规则
+  deploy: []                         # [可选] 部署/构建规则
+
+# ============================================================
+# 任务 DAG — 权限: status=E, 其余=O
+# ============================================================
+tasks:                               # [自动]
+  - id: ""                           # [必填] 唯一任务 ID
+    title: ""                        # [必填]
+    status: ""                       # [E] pending | running | done | failed | blocked
+    agent: ""                        # [必填] Agent 类型
+    depends_on: []                   # [必填] 依赖的任务 ID
+    file: ""                         # [可选] 主文件路径
+    risk: ""                         # [必填] low | medium | high | critical
+    confidence: 1.0                  # [E] 0.0–1.0，Agent 对自己产出的信心
+    uncertainties: []                # [E] Agent 声明的不确定项
+
+    lifecycle:                       # [自动]
+      created_at: ""
+      started_at: ""
+      review_started_at: ""
+      completed_at: ""
+
+    retries:                         # [自动]
+      count: 0
+      max: 2
+      reasons: []                    # 每次失败原因
+
+# ============================================================
+# 文件锁 — 权限: O
+# ============================================================
+locks:                               # [自动]
+  - type: file                       # file | logical
+    resource: ""                     # 文件路径或逻辑资源名
+    owner: ""                        # task ID
+    acquired: ""
+
+# ============================================================
+# 健康快照 — 权限: V
+# ============================================================
+health:                              # [必填]
+  build:
+    status: unknown                  # [V] passed | failed | unknown
+    timestamp: ""
+  lint:
+    status: unknown                  # [V]
+    timestamp: ""
+  tests:
+    unit: unknown                    # [V]
+    integration: unknown             # [V]
+    timestamp: ""
+  known_issues: []                   # [V] 已知问题，非本次引入
+
+# ============================================================
+# 架构决策日志 — 权限: A
+# ============================================================
+decisions:                           # [可选]
+  - id: ""                           # [A] 决策 ID
+    title: ""                        # [A]
+    reason: ""                       # [A]
+    decided_by: ""                   # [A] Agent 类型
+    timestamp: ""                    # [自动]
+    supersedes: ""                   # [可选] 被替代的旧决策 ID
+
+# ============================================================
+# 产出物清单 — 权限: E
+# ============================================================
+artifacts:                           # [E]
+  - task_id: ""                      # [必填]
+    files: []                        # [E]
+    notes: ""                        # [E]
+
+    generated_by:                    # [自动] 来源链
+      task: ""
+      agent: ""
+
+    reviewed_by: []                  # [V] 审查者列表
+
+# ============================================================
+# 任务分级 — 权限: H (Orchestrator 接到任务后 3 秒内定级)
+# ============================================================
+task_classification:                  # [必填]
+  L0_direct:                          # 直行：单文件、纯文本、不改逻辑
+    trigger:
+      - "单文件修改"
+      - "不改逻辑（typo/文案/注释/格式）"
+      - "不涉及接口/类型/构建"
+    state_write: none                  # 不写 state
+    review: none
+    lock: false
+    build: skip
+    estimated: "< 10s"
+
+  L1_light:                           # 轻量：单文件、改逻辑、低风险
+    trigger:
+      - "单文件修改"
+      - "改内部逻辑但不改接口"
+      - "不改 API schema / 数据模型 / auth"
+    state_write: [task, artifact]      # 只写任务 + 产出物
+    review: quality                    # 单一 reviewer
+    lock: false
+    build: skip
+    estimated: "< 2min"
+
+  L2_standard:                        # 标准：多文件、中等风险
+    trigger:
+      - "2–5 个文件"
+      - "改组件内部实现"
+      - "不涉及架构变更"
+    state_write: [task, artifact, lock, health]
+    review: [quality, architecture]    # 并行 review
+    lock: true
+    build: targeted
+    estimated: "5–10min"
+
+  L3_strict:                          # 严格：跨模块、高风险、改接口
+    trigger:
+      - "> 5 个文件 或 跨模块"
+      - "改 API schema / 数据模型 / auth / 路由"
+      - "新增模块或删除功能"
+    state_write: all                   # 完整 state 流程
+    review: [quality, architecture, security]  # 串行 review
+    lock: true
+    build: full
+    estimated: "10–30min"
+
+# ============================================================
+# 风险引擎 — 权限: H
+# ============================================================
+risk_policy:                         # [必填]
+  low:
+    reviewers: [quality]
+    build: skip
+    retry_max: 2
+    concurrent: true
+  medium:
+    reviewers: [quality, architecture]
+    build: targeted
+    retry_max: 2
+    concurrent: true
+  high:
+    reviewers: [quality, architecture, security]
+    build: full
+    retry_max: 1
+    concurrent: false
+  critical:
+    reviewers: [quality, architecture, security]
+    build: full
+    retry_max: 0
+    concurrent: false
+
+  escalation:                        # [必填] 升级策略
+    high_risk_failure:
+      action: human_review
+    repeated_failure:
+      threshold: 2
+      action: architect_review
+    confidence_below:
+      threshold: 0.5
+      action: human_review
+
+risks:                               # [自动] 当前风险清单
+  - id: ""
+    file: ""
+    level: ""
+    description: ""
+    mitigation: ""
+    status: ""                       # open | mitigated | accepted
